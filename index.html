@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pipeline Tracker</title>
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<style>
+:root{--bg:#f4f6f5;--surface:#fff;--surface2:#eef1ef;--border:#dde2df;--text:#14201b;--muted:#5d6b64;--accent:#0f766e;--accent-text:#fff;--hi:#dc2626;--md:#d97706;--lo:#16a34a;--today:#e6f4f1;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0d1412;--surface:#141d1a;--surface2:#1b2622;--border:#27342f;--text:#e8efec;--muted:#93a39b;--accent:#2dd4bf;--accent-text:#04201c;--hi:#f87171;--md:#fbbf24;--lo:#4ade80;--today:#12302b;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0d1412;--surface:#141d1a;--surface2:#1b2622;--border:#27342f;--text:#e8efec;--muted:#93a39b;--accent:#2dd4bf;--accent-text:#04201c;--hi:#f87171;--md:#fbbf24;--lo:#4ade80;--today:#12302b;color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{background:var(--bg);color:var(--text);font-family:"DM Sans",system-ui,-apple-system,"Segoe UI",sans-serif;margin:0}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px}
+.btn{border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:8px;padding:.5rem .85rem;font-size:.875rem;font-weight:500;cursor:pointer}
+.btn:hover{background:var(--surface2)}
+.btn-primary{background:var(--accent);color:var(--accent-text);border-color:var(--accent)}
+.btn-primary:hover{background:var(--accent);filter:brightness(1.08)}
+.btn-danger{color:var(--hi)}
+.seg button{padding:.45rem .9rem;font-size:.875rem;font-weight:500;color:var(--muted);border-radius:6px;border:0;background:transparent;cursor:pointer}
+.seg button.on{background:var(--accent);color:var(--accent-text)}
+.days{display:grid;grid-template-columns:minmax(0,1fr);gap:.6rem}
+@media(min-width:900px){.days{grid-template-columns:repeat(7,minmax(0,1fr))}.blank{display:block!important}}
+.blank{display:none}
+.day{min-height:120px;padding:.6rem;display:flex;flex-direction:column;gap:.4rem}
+.day.today{background:var(--today);border-color:var(--accent)}
+.task{border:1px solid var(--border);background:var(--bg);border-radius:8px;padding:.4rem .5rem;display:flex;gap:.45rem;align-items:flex-start;cursor:pointer;border-left:3px solid var(--md)}
+.task.p-High{border-left-color:var(--hi)}.task.p-Low{border-left-color:var(--lo)}
+.task.done .tt{text-decoration:line-through;color:var(--muted)}
+.task input{accent-color:var(--accent);margin-top:.2rem;width:15px;height:15px;cursor:pointer;flex:none}
+.tt{font-size:.8rem;font-weight:500;line-height:1.25;word-break:break-word}
+.meta{font-size:.68rem;color:var(--muted);margin-top:2px}
+.st-In{color:var(--md)}
+.field{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:.55rem .7rem;font-size:.9rem}
+.field:focus,.btn:focus-visible,.seg button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+label.l{display:block;font-size:.78rem;color:var(--muted);margin-bottom:.25rem;font-weight:500}
+#modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;padding:1rem;z-index:50}
+#modal.open{display:flex}
+#pdfroot{position:fixed;left:-10000px;top:0;width:720px;background:#fff}
+</style>
+</head>
+<body>
+<div class="mx-auto max-w-[1400px] px-4 py-5 sm:px-6">
+  <header class="flex flex-wrap items-center justify-between gap-3">
+    <div>
+      <h1 class="text-2xl font-bold tracking-tight">Pipeline Tracker</h1>
+      <p class="text-sm" style="color:var(--muted)">Daily activity planner for business and recruitment teams</p>
+    </div>
+    <div class="flex flex-wrap items-center gap-2">
+      <button id="theme" class="btn" aria-label="Toggle theme">Theme</button>
+      <button id="pdf" class="btn btn-primary">Download PDF</button>
+    </div>
+  </header>
+
+  <section class="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4" id="stats"></section>
+
+  <section class="mt-5 flex flex-wrap items-center justify-between gap-3">
+    <div class="seg card flex p-1" role="group" aria-label="View">
+      <button id="v2w">2-Week Tracker</button><button id="v1m">1-Month Tracker</button>
+    </div>
+    <div class="flex items-center gap-2">
+      <button id="prev" class="btn" aria-label="Previous period">&lsaquo;</button>
+      <div id="range" class="min-w-[170px] text-center text-sm font-semibold"></div>
+      <button id="next" class="btn" aria-label="Next period">&rsaquo;</button>
+      <button id="todayBtn" class="btn">Today</button>
+    </div>
+  </section>
+
+  <main id="grid" class="days mt-4"></main>
+</div>
+
+<div id="modal" role="dialog" aria-modal="true" aria-labelledby="mTitle">
+  <form id="form" class="card w-full max-w-md p-5" autocomplete="off">
+    <h2 id="mTitle" class="mb-4 text-lg font-semibold">New task</h2>
+    <div class="space-y-3">
+      <div><label class="l" for="fTitle">Task title</label><input id="fTitle" class="field" required maxlength="120" placeholder="e.g. Screen 5 senior engineer candidates"></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="l" for="fDate">Date</label><input id="fDate" type="date" class="field" required></div>
+        <div><label class="l" for="fCat">Category</label><select id="fCat" class="field"></select></div>
+        <div><label class="l" for="fPri">Priority</label><select id="fPri" class="field"></select></div>
+        <div><label class="l" for="fSta">Status</label><select id="fSta" class="field"></select></div>
+      </div>
+    </div>
+    <div class="mt-5 flex items-center justify-between gap-2">
+      <button type="button" id="del" class="btn btn-danger">Delete</button>
+      <div class="flex gap-2"><button type="button" id="cancel" class="btn">Cancel</button><button type="submit" class="btn btn-primary">Save task</button></div>
+    </div>
+  </form>
+</div>
+<div id="pdfroot"></div>
+
+<script>
+const CATS=["Sourcing","Client Outreach","Interview","Admin"],PRIS=["High","Medium","Low"],STAS=["Pending","In Progress","Completed"];
+const KEY="pipelineTracker.v1";
+let tasks=[],view="2w",anchor=new Date(),editId=null,defDate=null;
+try{tasks=JSON.parse(localStorage.getItem(KEY)||"[]")}catch(e){tasks=[]}
+const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(tasks))}catch(e){}};
+try{view=localStorage.getItem(KEY+".view")||"2w";const t=localStorage.getItem(KEY+".theme");if(t)document.documentElement.dataset.theme=t}catch(e){}
+const $=id=>document.getElementById(id);
+const iso=d=>d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+const parse=s=>{const[a,b,c]=s.split("-").map(Number);return new Date(a,b-1,c)};
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const WD=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+const MO=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const fmt=d=>MO[d.getMonth()]+" "+d.getDate()+", "+d.getFullYear();
+
+function period(){
+  let days=[],lead=0;
+  if(view==="2w"){
+    const s=new Date(anchor.getFullYear(),anchor.getMonth(),anchor.getDate()-((anchor.getDay()+6)%7));
+    for(let i=0;i<14;i++)days.push(new Date(s.getFullYear(),s.getMonth(),s.getDate()+i));
+  }else{
+    const y=anchor.getFullYear(),m=anchor.getMonth(),n=new Date(y,m+1,0).getDate();
+    lead=(new Date(y,m,1).getDay()+6)%7;
+    for(let i=1;i<=n;i++)days.push(new Date(y,m,i));
+  }
+  return{days,lead};
+}
+const label=()=>{const{days}=period();return view==="2w"?fmt(days[0])+" – "+fmt(days[days.length-1]):["January","February","March","April","May","June","July","August","September","October","November","December"][anchor.getMonth()]+" "+anchor.getFullYear()};
+const inPeriod=()=>{const s=new Set(period().days.map(iso));return tasks.filter(t=>s.has(t.date))};
+
+function render(){
+  const{days,lead}=period(),list=inPeriod(),todayIso=iso(new Date());
+  $("v2w").className=view==="2w"?"on":"";$("v1m").className=view==="1m"?"on":"";
+  $("range").textContent=label();
+  const done=list.filter(t=>t.status==="Completed").length,prog=list.filter(t=>t.status==="In Progress").length,pend=list.filter(t=>t.status==="Pending").length;
+  const pct=list.length?Math.round(done/list.length*100):0;
+  const stat=(n,v,c)=>`<div class="card p-4"><div class="text-sm" style="color:var(--muted)">${n}</div><div class="mt-1 text-3xl font-bold" style="color:${c||"var(--text)"}">${v}</div></div>`;
+  $("stats").innerHTML=stat("Total tasks",list.length)+stat("Completed",done+" <span class='text-sm font-medium' style='color:var(--muted)'>"+pct+"%</span>","var(--lo)")+stat("Pending",pend+" <span class='text-sm font-medium' style='color:var(--muted)'>+"+prog+" in progress</span>","var(--md)")+
+    `<div class="card p-4 col-span-2 sm:col-span-1"><div class="text-sm" style="color:var(--muted)">Period progress</div><div class="mt-3 h-2.5 overflow-hidden rounded-full" style="background:var(--surface2)"><div style="width:${pct}%;background:var(--accent);height:100%"></div></div><div class="mt-2 text-xs" style="color:var(--muted)">${done} of ${list.length} done</div></div>`;
+  let h="";
+  for(let i=0;i<lead;i++)h+='<div class="blank"></div>';
+  for(const d of days){
+    const k=iso(d),ts=tasks.filter(t=>t.date===k);
+    h+=`<div class="card day ${k===todayIso?"today":""}"><div class="flex items-center justify-between"><span class="text-sm font-semibold">${WD[d.getDay()]} ${d.getDate()}${view==="1m"?"":" "+MO[d.getMonth()]}</span><button class="btn" style="padding:.1rem .5rem" data-add="${k}" aria-label="Add task on ${k}">+</button></div>`+
+    ts.map(t=>`<div class="task p-${t.priority} ${t.status==="Completed"?"done":""}" data-edit="${t.id}"><input type="checkbox" data-chk="${t.id}" ${t.status==="Completed"?"checked":""} aria-label="Mark complete"><div><div class="tt">${esc(t.title)}</div><div class="meta">${esc(t.category)} · ${t.priority} · <span class="st-${t.status.slice(0,2)}">${t.status}</span></div></div></div>`).join("")+
+    (ts.length?"":`<div class="text-xs" style="color:var(--muted)">No tasks</div>`)+`</div>`;
+  }
+  $("grid").innerHTML=h;
+}
+
+function open_(id,date){
+  editId=id;const t=tasks.find(x=>x.id===id)||{title:"",date:date||iso(new Date()),category:CATS[0],priority:"Medium",status:"Pending"};
+  $("mTitle").textContent=id?"Edit task":"New task";$("del").style.display=id?"":"none";
+  $("fTitle").value=t.title;$("fDate").value=t.date;$("fCat").value=t.category;$("fPri").value=t.priority;$("fSta").value=t.status;
+  $("modal").classList.add("open");$("fTitle").focus();
+}
+const close_=()=>$("modal").classList.remove("open");
+const opts=(el,a)=>el.innerHTML=a.map(x=>`<option>${x}</option>`).join("");
+opts($("fCat"),CATS);opts($("fPri"),PRIS);opts($("fSta"),STAS);
+
+$("grid").addEventListener("click",e=>{
+  const c=e.target.closest("[data-chk]");
+  if(c){const t=tasks.find(x=>x.id===c.dataset.chk);t.status=c.checked?"Completed":"Pending";save();render();return}
+  const a=e.target.closest("[data-add]");if(a)return open_(null,a.dataset.add);
+  const t=e.target.closest("[data-edit]");if(t)open_(t.dataset.edit);
+});
+$("form").addEventListener("submit",e=>{
+  e.preventDefault();
+  const o={title:$("fTitle").value.trim(),date:$("fDate").value,category:$("fCat").value,priority:$("fPri").value,status:$("fSta").value};
+  if(!o.title||!o.date)return;
+  if(editId)Object.assign(tasks.find(x=>x.id===editId),o);else tasks.push({id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),...o});
+  save();close_();render();
+});
+$("del").onclick=()=>{if(editId&&confirm("Delete this task?")){tasks=tasks.filter(x=>x.id!==editId);save();close_();render()}};
+$("cancel").onclick=close_;
+$("modal").addEventListener("mousedown",e=>{if(e.target===$("modal"))close_()});
+document.addEventListener("keydown",e=>{if(e.key==="Escape")close_()});
+const setView=v=>{view=v;try{localStorage.setItem(KEY+".view",v)}catch(e){}render()};
+$("v2w").onclick=()=>setView("2w");$("v1m").onclick=()=>setView("1m");
+const shift=n=>{anchor=view==="2w"?new Date(anchor.getFullYear(),anchor.getMonth(),anchor.getDate()+14*n):new Date(anchor.getFullYear(),anchor.getMonth()+n,1);render()};
+$("prev").onclick=()=>shift(-1);$("next").onclick=()=>shift(1);$("todayBtn").onclick=()=>{anchor=new Date();render()};
+$("theme").onclick=()=>{const r=document.documentElement,dark=r.dataset.theme?r.dataset.theme==="dark":matchMedia("(prefers-color-scheme:dark)").matches;r.dataset.theme=dark?"light":"dark";try{localStorage.setItem(KEY+".theme",r.dataset.theme)}catch(e){}};
+
+$("pdf").onclick=async()=>{
+  const{days}=period(),list=inPeriod(),done=list.filter(t=>t.status==="Completed").length,prog=list.filter(t=>t.status==="In Progress").length,pend=list.filter(t=>t.status==="Pending").length;
+  const pc={High:"#dc2626",Medium:"#d97706",Low:"#16a34a"},td="padding:6px 8px;border-bottom:1px solid #e5e7eb;font-size:11px;vertical-align:top;";
+  const box=(n,v)=>`<div style="flex:1;border:1px solid #d1d5db;border-radius:8px;padding:10px"><div style="font-size:10px;color:#6b7280">${n}</div><div style="font-size:22px;font-weight:700">${v}</div></div>`;
+  let h=`<div style="font-family:Helvetica,Arial,sans-serif;color:#111827;padding:6px">
+  <div style="border-bottom:3px solid #0f766e;padding-bottom:8px;margin-bottom:12px"><div style="font-size:22px;font-weight:700">Pipeline Tracker – ${view==="2w"?"2-Week":"1-Month"} Report</div><div style="font-size:12px;color:#4b5563;margin-top:3px">${label()} · Generated ${fmt(new Date())}</div></div>
+  <div style="display:flex;gap:8px;margin-bottom:16px">${box("Total tasks",list.length)}${box("Completed",done)}${box("In progress",prog)}${box("Pending",pend)}</div>`;
+  let any=false;
+  for(const d of days){
+    const ts=tasks.filter(t=>t.date===iso(d));if(!ts.length)continue;any=true;
+    h+=`<div style="page-break-inside:avoid;margin-bottom:12px"><div style="background:#f0fdfa;border-left:4px solid #0f766e;padding:5px 8px;font-size:12px;font-weight:700">${WD[d.getDay()]}, ${fmt(d)}</div>
+    <table style="width:100%;border-collapse:collapse"><tr style="text-align:left;font-size:10px;color:#6b7280"><th style="${td}width:42%">Task</th><th style="${td}">Category</th><th style="${td}">Priority</th><th style="${td}">Status</th></tr>`+
+    ts.map(t=>`<tr style="page-break-inside:avoid"><td style="${td}${t.status==="Completed"?"text-decoration:line-through;color:#6b7280;":""}">${t.status==="Completed"?"&#10003; ":""}${esc(t.title)}</td><td style="${td}">${esc(t.category)}</td><td style="${td}color:${pc[t.priority]};font-weight:600">${t.priority}</td><td style="${td}">${t.status}</td></tr>`).join("")+`</table></div>`;
+  }
+  if(!any)h+=`<p style="font-size:12px;color:#6b7280">No tasks scheduled in this period.</p>`;
+  h+="</div>";
+  const root=$("pdfroot");root.innerHTML=h;
+  const b=$("pdf");b.textContent="Generating…";b.disabled=true;
+  try{await html2pdf().set({margin:10,filename:`pipeline-tracker-${iso(period().days[0])}.pdf`,image:{type:"jpeg",quality:.95},html2canvas:{scale:2,backgroundColor:"#ffffff"},jsPDF:{unit:"mm",format:"a4",orientation:"portrait"},pagebreak:{mode:["css","legacy"]}}).from(root).save()}
+  catch(e){alert("PDF export failed. Please try again.")}
+  b.textContent="Download PDF";b.disabled=false;root.innerHTML="";
+};
+render();
+</script>
+</body>
+</html>
