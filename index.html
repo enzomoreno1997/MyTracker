@@ -22,8 +22,9 @@ body{background:var(--bg);color:var(--text);font-family:"DM Sans",system-ui,-app
 .seg button{padding:.45rem .9rem;font-size:.875rem;font-weight:500;color:var(--muted);border-radius:6px;border:0;background:transparent;cursor:pointer}
 .seg button.on{background:var(--accent);color:var(--accent-text)}
 .days{display:grid;grid-template-columns:minmax(0,1fr);gap:.6rem}
-@media(min-width:900px){.days{grid-template-columns:repeat(7,minmax(0,1fr))}.blank{display:block!important}}
+@media(min-width:900px){.days{grid-template-columns:repeat(var(--cols,7),minmax(0,1fr))}.blank{display:block!important}}
 .blank{display:none}
+#repDays button{padding:.4rem .3rem;flex:1}
 .day{min-height:120px;padding:.6rem;display:flex;flex-direction:column;gap:.4rem}
 .day.today{background:var(--today);border-color:var(--accent)}
 .task{border:1px solid var(--border);background:var(--bg);border-radius:8px;padding:.4rem .5rem;display:flex;gap:.45rem;align-items:flex-start;cursor:pointer;border-left:3px solid var(--md)}
@@ -38,7 +39,7 @@ body{background:var(--bg);color:var(--text);font-family:"DM Sans",system-ui,-app
 label.l{display:block;font-size:.78rem;color:var(--muted);margin-bottom:.25rem;font-weight:500}
 #modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;padding:1rem;z-index:50}
 #modal.open{display:flex}
-#pdfroot{position:fixed;left:-10000px;top:0;width:720px;background:#fff}
+
 </style>
 </head>
 <body>
@@ -68,6 +69,8 @@ label.l{display:block;font-size:.78rem;color:var(--muted);margin-bottom:.25rem;f
     </div>
   </section>
 
+  <section class="mt-3 flex flex-wrap items-center gap-2" aria-label="Days shown"><span class="text-sm" style="color:var(--muted)">Show days:</span><div id="daychips" class="seg card flex p-1"></div><button id="wk" class="btn">Mon–Fri</button><button id="all" class="btn">All days</button></section>
+
   <main id="grid" class="days mt-4"></main>
 </div>
 
@@ -82,7 +85,7 @@ label.l{display:block;font-size:.78rem;color:var(--muted);margin-bottom:.25rem;f
         <div><label class="l" for="fCat">Category</label><select id="fCat" class="field"></select></div>
         <div><label class="l" for="fPri">Priority</label><select id="fPri" class="field"></select></div>
         <div><label class="l" for="fSta">Status</label><select id="fSta" class="field"></select></div>
-        <div id="repWrap"><label class="l" for="fRep">Repeat until end of month</label><select id="fRep" class="field"><option value="none">Does not repeat</option><option value="daily">Every day</option><option value="weekdays">Weekdays only</option><option value="weekly">Every week</option></select></div>
+        <div id="repWrap" class="col-span-2"><label class="l" for="fRep">Repeat until end of month</label><select id="fRep" class="field"><option value="none">Does not repeat</option><option value="daily">Every day</option><option value="weekdays">Weekdays only</option><option value="weekly">Every week</option><option value="custom">Choose days…</option></select><div id="repDays" class="seg card mt-2 p-1" style="display:none;flex-wrap:wrap"></div></div>
       </div>
     </div>
     <div class="mt-5 flex items-center justify-between gap-2">
@@ -91,15 +94,14 @@ label.l{display:block;font-size:.78rem;color:var(--muted);margin-bottom:.25rem;f
     </div>
   </form>
 </div>
-<div id="pdfroot"></div>
 
 <script>
 const CATS=["Personal","Work","Health","Errands","Finance","Social"],PRIS=["High","Medium","Low"],STAS=["Pending","In Progress","Completed"];
 const KEY="pipelineTracker.v1";
-let tasks=[],view="2w",anchor=new Date(),editId=null,defDate=null;
+let tasks=[],view="2w",anchor=new Date(),editId=null,defDate=null,shown=[1,2,3,4,5,6,0];const ORDER=[1,2,3,4,5,6,0];
 try{tasks=JSON.parse(localStorage.getItem(KEY)||"[]")}catch(e){tasks=[]}
 const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(tasks))}catch(e){}};
-try{view=localStorage.getItem(KEY+".view")||"2w";const t=localStorage.getItem(KEY+".theme");if(t)document.documentElement.dataset.theme=t}catch(e){}
+try{view=localStorage.getItem(KEY+".view")||"2w";const sd=localStorage.getItem(KEY+".days");if(sd)shown=JSON.parse(sd);const t=localStorage.getItem(KEY+".theme");if(t)document.documentElement.dataset.theme=t}catch(e){}
 const $=id=>document.getElementById(id);
 const iso=d=>d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
 const parse=s=>{const[a,b,c]=s.split("-").map(Number);return new Date(a,b-1,c)};
@@ -120,7 +122,7 @@ function period(){
     lead=(new Date(y,m,1).getDay()+6)%7;
     for(let i=1;i<=n;i++)days.push(new Date(y,m,i));
   }
-  return{days,lead};
+  days=days.filter(d=>shown.includes(d.getDay()));const so=ORDER.filter(n=>shown.includes(n));lead=days.length?so.indexOf(days[0].getDay()):0;return{days,lead};
 }
 const label=()=>{const{days}=period();return view==="2w"?fmt(days[0])+" – "+fmt(days[days.length-1]):["January","February","March","April","May","June","July","August","September","October","November","December"][anchor.getMonth()]+" "+anchor.getFullYear()};
 const inPeriod=()=>{const s=new Set(period().days.map(iso));return tasks.filter(t=>s.has(t.date))};
@@ -129,6 +131,8 @@ function render(){
   const{days,lead}=period(),list=inPeriod(),todayIso=iso(new Date());
   $("v2w").className=view==="2w"?"on":"";$("v1m").className=view==="1m"?"on":"";
   $("range").textContent=label();
+  $("daychips").innerHTML=ORDER.map(n=>`<button data-day="${n}" class="${shown.includes(n)?"on":""}">${WD[n]}</button>`).join("");
+  $("grid").style.setProperty("--cols",shown.length);
   const done=list.filter(t=>t.status==="Completed").length,prog=list.filter(t=>t.status==="In Progress").length,pend=list.filter(t=>t.status==="Pending").length;
   const pct=list.length?Math.round(done/list.length*100):0;
   const stat=(n,v,c)=>`<div class="card p-4"><div class="text-sm" style="color:var(--muted)">${n}</div><div class="mt-1 text-3xl font-bold" style="color:${c||"var(--text)"}">${v}</div></div>`;
@@ -148,7 +152,7 @@ function render(){
 function open_(id,date){
   editId=id;const t=tasks.find(x=>x.id===id)||{title:"",date:date||iso(new Date()),time:"",category:CATS[0],priority:"Medium",status:"Pending"};
   $("mTitle").textContent=id?"Edit task":"New task";$("del").style.display=id?"":"none";
-  if(![...$("fCat").options].some(o=>o.value===t.category))$("fCat").add(new Option(t.category));$("repWrap").style.display=id?"none":"";$("fRep").value="none";$("fTime").value=t.time||"";$("fTitle").value=t.title;$("fDate").value=t.date;$("fCat").value=t.category;$("fPri").value=t.priority;$("fSta").value=t.status;
+  if(![...$("fCat").options].some(o=>o.value===t.category))$("fCat").add(new Option(t.category));$("repWrap").style.display=id?"none":"";$("fRep").value="none";repSel=[parse(t.date).getDay()];$("repDays").style.display="none";drawRep();$("fTime").value=t.time||"";$("fTitle").value=t.title;$("fDate").value=t.date;$("fCat").value=t.category;$("fPri").value=t.priority;$("fSta").value=t.status;
   $("modal").classList.add("open");$("fTitle").focus();
 }
 const close_=()=>$("modal").classList.remove("open");
@@ -168,7 +172,7 @@ $("form").addEventListener("submit",e=>{
   if(editId)Object.assign(tasks.find(x=>x.id===editId),o);else{
     const rep=$("fRep").value,uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6),s=parse(o.date),last=new Date(s.getFullYear(),s.getMonth()+1,0);
     for(let d=new Date(s);d<=last;d=new Date(d.getFullYear(),d.getMonth(),d.getDate()+(rep==="weekly"?7:1))){
-      const w=d.getDay();if(rep==="weekdays"&&(w===0||w===6))continue;
+      const w=d.getDay();if(rep==="weekdays"&&(w===0||w===6))continue;if(rep==="custom"&&!repSel.includes(w))continue;
       tasks.push({id:uid(),...o,date:iso(d)});if(rep==="none")break;
     }
   }
@@ -200,12 +204,19 @@ $("pdf").onclick=async()=>{
   }
   if(!any)h+=`<p style="font-size:12px;color:#6b7280">No tasks scheduled in this period.</p>`;
   h+="</div>";
-  const root=$("pdfroot");root.innerHTML=h;
+  const root=document.createElement("div");root.style.cssText="width:700px;background:#fff;color:#111827";root.innerHTML=h;
   const b=$("pdf");b.textContent="Generating…";b.disabled=true;
   try{await html2pdf().set({margin:10,filename:`my-planner-${iso(period().days[0])}.pdf`,image:{type:"jpeg",quality:.95},html2canvas:{scale:2,backgroundColor:"#ffffff"},jsPDF:{unit:"mm",format:"a4",orientation:"portrait"},pagebreak:{mode:["css","legacy"]}}).from(root).save()}
   catch(e){alert("PDF export failed. Please try again.")}
-  b.textContent="Download PDF";b.disabled=false;root.innerHTML="";
+  b.textContent="Download PDF";b.disabled=false;
 };
+let repSel=[];
+const drawRep=()=>{$("repDays").innerHTML=ORDER.map(n=>`<button type="button" data-rd="${n}" class="${repSel.includes(n)?"on":""}">${WD[n]}</button>`).join("")};
+$("fRep").onchange=()=>{$("repDays").style.display=$("fRep").value==="custom"?"flex":"none"};
+$("repDays").addEventListener("click",e=>{const b=e.target.closest("[data-rd]");if(!b)return;const n=+b.dataset.rd,a=repSel.includes(n)?repSel.filter(x=>x!==n):[...repSel,n];if(a.length){repSel=a;drawRep()}});
+const setDays=a=>{shown=a;try{localStorage.setItem(KEY+".days",JSON.stringify(a))}catch(e){}render()};
+$("daychips").addEventListener("click",e=>{const b=e.target.closest("[data-day]");if(!b)return;const n=+b.dataset.day,a=shown.includes(n)?shown.filter(x=>x!==n):[...shown,n];if(a.length)setDays(a)});
+$("wk").onclick=()=>setDays([1,2,3,4,5]);$("all").onclick=()=>setDays([1,2,3,4,5,6,0]);
 render();
 </script>
 </body>
